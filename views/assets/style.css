@@ -648,14 +648,16 @@ button {
 
 /* ── 只响应操作的小动效 ─────────────────────────────────────── */
 
+/* 必须用独立的 scale 属性，不能用 transform：2048 方块的位移就写在 transform 上，
+   keyframes 里的 transform 会在动画期间整体替换它，方块会先出现在棋盘左上角、动画结束才跳进格子。 */
 @keyframes mg-pop-in {
   from {
     opacity: 0;
-    transform: scale(0.94);
+    scale: 0.94;
   }
   to {
     opacity: 1;
-    transform: scale(1);
+    scale: 1;
   }
 }
 

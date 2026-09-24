@@ -29,7 +29,6 @@
 
   const MOYU = (window.MOYU = window.MOYU || {});
   MOYU.games = MOYU.games || {};
-  MOYU.version = "0.1.0";
 
   const LS_KEY = "moyu-games.prefs.v1";
   const SAVE_DEBOUNCE_MS = 400;

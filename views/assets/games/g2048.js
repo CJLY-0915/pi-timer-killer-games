@@ -76,8 +76,10 @@
       line-height: 1;
       background: var(--mg-2048-t2-bg);
       color: var(--mg-2048-t2-fg);
-      transition: transform 0.12s ease-in-out;
-      will-change: transform;
+      /* 位移写在独立的 translate 上、弹出动画写在独立的 scale 上，两者都不碰 transform：
+         共用一个 transform 时，scale 会以位移前的原点缩放，方块一边长大一边往格子里滑。 */
+      transition: translate 0.12s ease-in-out;
+      will-change: translate;
     }
     .mg-2048-tile.vwide { font-size: calc(var(--mg-2048-cell, 64px) * 0.38); }
     .mg-2048-tile.vlong { font-size: calc(var(--mg-2048-cell, 64px) * 0.3); }
@@ -384,10 +386,11 @@
         }
       }
 
+      /** 位置只走 translate 属性：transform 留给别处（弹出动画用 scale），避免合成顺序把弹出变成滑动。 */
       function place(el, row, col) {
         const x = gapSize + col * (cellSize + gapSize);
         const y = gapSize + row * (cellSize + gapSize);
-        el.style.transform = `translate(${x}px, ${y}px)`;
+        el.style.translate = `${x}px ${y}px`;
       }
 
       function tileClass(value) {
@@ -601,8 +604,9 @@
       const observer = new ResizeObserver(() => layout());
       observer.observe(stage);
 
-      newGame();
+      // 先量尺寸再发牌：否则首批方块先用默认格子尺寸落位，layout() 再改一次就白动一下
       layout();
+      newGame();
 
       return () => {
         observer.disconnect();
