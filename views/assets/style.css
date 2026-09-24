@@ -1,0 +1,673 @@
+/*
+ * 摸鱼小游戏 — 视觉系统
+ *
+ * 设定：办公桌上的「考勤表 + 打卡机」。纸和墨，不是面板和阴影。
+ *   · 规则线（hairline）承担信息：它是表格的分栏，不是装饰。
+ *   · 圆角统一收紧（3/6/10px）：这是一张表，不是一组卡片。
+ *   · 两个强调色各司其职：mark 是荧光笔（交互高亮），bad 是印章红（纪录与失败）。
+ *   · 唯一自己会动的东西是首屏的翻页时钟；其余动效只在响应操作时出现。
+ *
+ * 令牌名（--mg-*）被五个游戏模块直接引用，改名会一起坏，只能改值。
+ */
+
+:root {
+  --mg-font: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --mg-mono: ui-monospace, SFMono-Regular, "Cascadia Mono", "JetBrains Mono", Consolas,
+    "Liberation Mono", monospace;
+  --mg-r-sm: 3px;
+  --mg-r-md: 6px;
+  --mg-r-lg: 10px;
+}
+
+/* 亮色：考勤表（冷灰绿的办公再生纸，不是奶油色） */
+html[data-theme="light"] {
+  --mg-bg: #ecEDE6;
+  --mg-surface: #f5f6f0;
+  --mg-surface-2: #e3e5dc;
+  --mg-line: #c8ccc1;
+  --mg-rule-ink: rgba(27, 36, 48, 0.5);
+  --mg-text: #1b2430;
+  --mg-dim: #5f6b76;
+  --mg-accent: #0e6b5a;
+  --mg-accent-soft: rgba(14, 107, 90, 0.1);
+  --mg-on-accent: #f5f6f0;
+  --mg-mark: rgba(240, 196, 69, 0.55);
+  --mg-warn: #8f5d0e;
+  --mg-bad: #b23a2c;
+  --mg-shadow: 0 6px 18px rgba(27, 36, 48, 0.1);
+  --mg-seam: rgba(27, 36, 48, 0.22);
+  color-scheme: light;
+}
+
+/* 暗色：夜班（灯光下的一页纸） */
+html[data-theme="dark"] {
+  --mg-bg: #14181e;
+  --mg-surface: #1b2027;
+  --mg-surface-2: #222831;
+  --mg-line: #2e3540;
+  --mg-rule-ink: rgba(228, 226, 215, 0.4);
+  --mg-text: #e4e2d7;
+  --mg-dim: #8b94a0;
+  --mg-accent: #57c4a6;
+  --mg-accent-soft: rgba(87, 196, 166, 0.14);
+  --mg-on-accent: #0b2018;
+  --mg-mark: rgba(217, 168, 60, 0.38);
+  --mg-warn: #d9a83c;
+  --mg-bad: #d9584b;
+  --mg-shadow: 0 8px 22px rgba(0, 0, 0, 0.45);
+  --mg-seam: rgba(0, 0, 0, 0.5);
+  color-scheme: dark;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  /* 停靠视图里宿主把该变量发布为 0；独立面板窗口里是 46px 的拖拽带 */
+  padding-top: var(--pi-plugin-titlebar-height, 0px);
+  background: var(--mg-bg);
+  color: var(--mg-text);
+  font: 13px/1.55 var(--mg-font);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible {
+  outline: 2px solid var(--mg-accent);
+  outline-offset: 1px;
+}
+
+button {
+  font-family: inherit;
+}
+
+/* ── 外壳骨架 ───────────────────────────────────────────────── */
+
+.mg-root {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.mg-top {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  background: var(--mg-surface);
+  border-bottom: 1.5px solid var(--mg-rule-ink);
+}
+
+.mg-top-titles {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.mg-top-title {
+  font-size: 13.5px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mg-top-sub {
+  font-family: var(--mg-mono);
+  font-size: 10.5px;
+  color: var(--mg-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mg-spacer {
+  flex: 1 1 auto;
+}
+
+.mg-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.mg-stage {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── 通用控件 ───────────────────────────────────────────────── */
+
+.mg-btn {
+  appearance: none;
+  border: 1px solid var(--mg-line);
+  background: var(--mg-surface);
+  color: var(--mg-text);
+  font-size: 11.5px;
+  line-height: 1.2;
+  padding: 6px 10px;
+  border-radius: var(--mg-r-sm);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.mg-btn:hover:not([disabled]) {
+  background: var(--mg-mark);
+  border-color: var(--mg-rule-ink);
+}
+
+.mg-btn:active:not([disabled]) {
+  transform: translateY(1px);
+}
+
+.mg-btn[disabled] {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.mg-btn.primary {
+  background: var(--mg-accent);
+  border-color: var(--mg-accent);
+  color: var(--mg-on-accent);
+  font-weight: 600;
+}
+
+.mg-btn.primary:hover:not([disabled]) {
+  background: var(--mg-accent);
+  border-color: var(--mg-text);
+}
+
+.mg-btn.ghost {
+  background: transparent;
+  border-color: transparent;
+}
+
+.mg-btn.ghost:hover:not([disabled]) {
+  border-color: var(--mg-line);
+}
+
+.mg-btn.icon {
+  padding: 6px 9px;
+  font-size: 14px;
+}
+
+/* 分段选择器：像表格里的格子，选中格用荧光笔划一道 */
+.mg-seg {
+  display: inline-flex;
+  border: 1px solid var(--mg-line);
+  border-radius: var(--mg-r-sm);
+  overflow: hidden;
+  background: var(--mg-surface);
+}
+
+.mg-seg button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--mg-dim);
+  font-size: 11px;
+  padding: 5px 9px;
+  cursor: pointer;
+}
+
+.mg-seg button + button {
+  border-left: 1px solid var(--mg-line);
+}
+
+.mg-seg button:hover {
+  background: var(--mg-mark);
+  color: var(--mg-text);
+}
+
+.mg-seg button[aria-pressed="true"] {
+  background: var(--mg-mark);
+  color: var(--mg-text);
+  font-weight: 650;
+}
+
+/* 读数格：表单里的一栏，不是徽章 */
+.mg-chips {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+.mg-chip {
+  font: 600 11px/1 var(--mg-mono);
+  padding: 5px 7px;
+  border-radius: var(--mg-r-sm);
+  background: var(--mg-surface);
+  border: 1px solid var(--mg-line);
+  white-space: nowrap;
+}
+
+.mg-chip .k {
+  color: var(--mg-dim);
+  font-family: var(--mg-font);
+  font-weight: 500;
+  margin-right: 5px;
+}
+
+.mg-chip.good {
+  color: var(--mg-accent);
+  border-color: color-mix(in oklab, var(--mg-accent) 45%, var(--mg-line));
+}
+
+.mg-chip.warn {
+  color: var(--mg-warn);
+  border-color: color-mix(in oklab, var(--mg-warn) 45%, var(--mg-line));
+}
+
+.mg-chip.bad {
+  color: var(--mg-bad);
+  border-color: color-mix(in oklab, var(--mg-bad) 45%, var(--mg-line));
+}
+
+.mg-help {
+  font-size: 11px;
+  color: var(--mg-dim);
+  line-height: 1.65;
+}
+
+.mg-help kbd {
+  font: 600 10px/1 var(--mg-mono);
+  border: 1px solid var(--mg-line);
+  border-bottom-width: 2px;
+  border-radius: 2px;
+  padding: 2px 4px;
+  background: var(--mg-surface-2);
+  color: var(--mg-text);
+}
+
+/* ── 游戏库：表头 + 打卡行 ──────────────────────────────────── */
+
+.mg-hub {
+  padding: 16px 14px 20px;
+  display: grid;
+  gap: 14px;
+  align-content: start;
+}
+
+.mg-hero {
+  display: grid;
+  gap: 7px;
+  justify-items: start;
+  padding-bottom: 16px;
+  border-bottom: 1.5px solid var(--mg-rule-ink);
+}
+
+.mg-hero-label {
+  font-size: 11.5px;
+  color: var(--mg-dim);
+  letter-spacing: 0.06em;
+}
+
+.mg-hero-note {
+  font-size: 11.5px;
+  color: var(--mg-dim);
+  line-height: 1.5;
+}
+
+.mg-hero-cta {
+  margin-top: 3px;
+}
+
+/* 翻页时钟：整个插件唯一自己会动的元素 */
+.mg-clock {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.mg-clock-track {
+  display: flex;
+  gap: 3px;
+  perspective: 340px;
+}
+
+.mg-clock-unit {
+  font-size: 11.5px;
+  color: var(--mg-dim);
+  padding-bottom: 5px;
+}
+
+.mg-digit {
+  position: relative;
+  width: 26px;
+  height: 38px;
+  border: 1px solid var(--mg-line);
+  border-radius: var(--mg-r-sm);
+  background: var(--mg-surface);
+  font: 600 25px/38px var(--mg-mono);
+  text-align: center;
+  overflow: hidden;
+}
+
+/* 中缝：翻页卡片对折的那条线 */
+.mg-digit::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+  background: var(--mg-seam);
+  z-index: 4;
+}
+
+.mg-digit-half,
+.mg-digit-leaf {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 50%;
+  overflow: hidden;
+}
+
+.mg-digit-half > span,
+.mg-digit-leaf > span {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 38px;
+  line-height: 38px;
+}
+
+.mg-digit-half.t,
+.mg-digit-leaf.t {
+  top: 0;
+  border-radius: var(--mg-r-sm) var(--mg-r-sm) 0 0;
+  background: linear-gradient(var(--mg-surface-2), var(--mg-surface));
+}
+
+.mg-digit-half.b,
+.mg-digit-leaf.b {
+  bottom: 0;
+  border-radius: 0 0 var(--mg-r-sm) var(--mg-r-sm);
+  background: linear-gradient(var(--mg-surface), var(--mg-surface-2));
+}
+
+.mg-digit-half.t > span,
+.mg-digit-leaf.t > span {
+  top: 0;
+}
+
+.mg-digit-half.b > span,
+.mg-digit-leaf.b > span {
+  top: -19px;
+}
+
+.mg-digit-leaf {
+  z-index: 3;
+  backface-visibility: hidden;
+}
+
+.mg-digit-leaf.t {
+  transform-origin: bottom center;
+}
+
+.mg-digit-leaf.b {
+  transform-origin: top center;
+  transform: rotateX(90deg);
+}
+
+.mg-digit.flip .mg-digit-leaf.t {
+  animation: mg-flip-top 180ms var(--flip-delay, 0ms) cubic-bezier(0.45, 0, 0.9, 0.55) both;
+}
+
+.mg-digit.flip .mg-digit-leaf.b {
+  animation: mg-flip-bottom 190ms calc(var(--flip-delay, 0ms) + 172ms) cubic-bezier(0.2, 0.7, 0.35, 1) both;
+}
+
+@keyframes mg-flip-top {
+  from {
+    transform: rotateX(0deg);
+  }
+  to {
+    transform: rotateX(-90deg);
+  }
+}
+
+@keyframes mg-flip-bottom {
+  from {
+    transform: rotateX(90deg);
+  }
+  to {
+    transform: rotateX(0deg);
+  }
+}
+
+.mg-ledger-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 2px 7px;
+  border-bottom: 1px solid var(--mg-line);
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  color: var(--mg-dim);
+}
+
+.mg-ledger-head-side {
+  font-family: var(--mg-mono);
+}
+
+.mg-ledger {
+  display: grid;
+}
+
+.mg-row {
+  appearance: none;
+  text-align: left;
+  display: grid;
+  grid-template-columns: 30px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 6px;
+  border: 0;
+  border-bottom: 1px solid var(--mg-line);
+  background: transparent;
+  color: var(--mg-text);
+  cursor: pointer;
+  border-radius: 0;
+}
+
+.mg-row:hover {
+  background: var(--mg-mark);
+}
+
+.mg-row:active {
+  transform: translateY(1px);
+}
+
+.mg-row-glyph {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  font-size: 15px;
+  border: 1px solid var(--mg-line);
+  border-radius: var(--mg-r-sm);
+  background: var(--mg-surface);
+}
+
+.mg-row-body {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.mg-row-name {
+  font-size: 13.5px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+
+.mg-row-tag {
+  font-size: 11px;
+  color: var(--mg-dim);
+  line-height: 1.4;
+}
+
+.mg-row-stat {
+  font: 600 11px/1.3 var(--mg-mono);
+  color: var(--mg-dim);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.mg-foot {
+  font-size: 11px;
+  color: var(--mg-dim);
+  line-height: 1.6;
+  padding-top: 2px;
+}
+
+/* ── 游戏容器 ───────────────────────────────────────────────── */
+
+.mg-game {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+}
+
+.mg-game-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.mg-board {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  position: relative;
+}
+
+/* 结算面板：一张纸，硬投影（印刷感），不是柔和的浮层 */
+.mg-overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 12px;
+  background: color-mix(in oklab, var(--mg-bg) 72%, transparent);
+  z-index: 5;
+}
+
+.mg-overlay[hidden] {
+  display: none;
+}
+
+.mg-panel {
+  background: var(--mg-surface);
+  border: 1.5px solid var(--mg-rule-ink);
+  border-radius: var(--mg-r-sm);
+  box-shadow: 4px 4px 0 var(--mg-rule-ink);
+  padding: 16px;
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+  text-align: center;
+  min-width: 190px;
+  max-width: 100%;
+}
+
+.mg-panel-title {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.mg-panel-text {
+  font-size: 11.5px;
+  color: var(--mg-dim);
+}
+
+.mg-panel-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 3px;
+}
+
+/* ── Toast：一张小纸条 ──────────────────────────────────────── */
+
+.mg-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  translate: -50% 6px;
+  background: var(--mg-surface);
+  color: var(--mg-text);
+  border: 1.5px solid var(--mg-rule-ink);
+  box-shadow: 3px 3px 0 var(--mg-rule-ink);
+  font: 600 11.5px/1.4 var(--mg-font);
+  padding: 7px 12px;
+  border-radius: var(--mg-r-sm);
+  z-index: 60;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.16s ease, translate 0.16s ease;
+  max-width: 80%;
+}
+
+.mg-toast.show {
+  opacity: 1;
+  translate: -50% 0;
+}
+
+/* ── 只响应操作的小动效 ─────────────────────────────────────── */
+
+@keyframes mg-pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.mg-pop {
+  animation: mg-pop-in 0.13s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -1,0 +1,11 @@
+# 打包产物由 PluginPack 在本地生成，不进仓库
+dist/
+*.piplug
+
+# 本地临时目录
+Temp/
+
+# 依赖与编辑器垃圾（本插件零依赖，仅防御）
+node_modules/
+.DS_Store
+Thumbs.db

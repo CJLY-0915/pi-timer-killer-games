@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "id": "icedly.moyu-games",
+  "name": "摸鱼小游戏",
+  "version": "0.1.0",
+  "description": "右侧工作面板里的休闲小游戏合集：扫雷、2048、纸牌接龙、俄罗斯方块、贪吃蛇。纯本地运行，不访问网络与文件系统；每个游戏各自记住最高分、设置与累计时长，跨会话保留。",
+  "i18n": {
+    "en": {
+      "name": "Time-Killer Games",
+      "description": "A local mini-game collection for the right work panel: Minesweeper, 2048, Klondike Solitaire, Tetris and Snake. Runs fully offline with no file or network access; each game keeps its own best score, settings and total play time across sessions.",
+      "safetyNotes": "Everything runs on your own machine. The plugin makes no network requests and reads no files outside its own data directory, and it asks for a single permission: a view in the right panel. Best scores and play time are stored locally in the plugin data directory and never leave the machine."
+    },
+    "zh-CN": {
+      "name": "摸鱼小游戏",
+      "description": "右侧工作面板里的休闲小游戏合集：扫雷、2048、纸牌接龙、俄罗斯方块、贪吃蛇。纯本地运行，不访问网络与文件系统；每个游戏各自记住最高分、设置与累计时长，跨会话保留。",
+      "safetyNotes": "全部在本机运行：不发任何网络请求，也不读取自己数据目录以外的文件；只申请一个权限，即右侧工作面板里的一个视图。最高分与累计时长存在插件自己的数据目录里，不会离开本机。"
+    }
+  },
+  "author": "cjly90",
+  "homepage": "https://github.com/CJLY-0915/pi-timer-killer-games",
+  "categories": ["productivity"],
+  "main": "main.js",
+  "permissions": ["ui.view"],
+  "contributes": {
+    "views": [
+      {
+        "id": "games",
+        "title": { "en": "Time-Killer Games", "zh-CN": "摸鱼小游戏" },
+        "icon": "sparkles",
+        "entry": "views/index.html",
+        "order": 50
+      }
+    ]
+  },
+  "engines": { "piDesktop": ">=0.15.0" },
+  "activationEvents": ["onStartup"]
+}

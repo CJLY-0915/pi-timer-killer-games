@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="pi-plugin-chrome" content="v2" />
+    <title>摸鱼小游戏</title>
+    <link rel="stylesheet" href="./assets/style.css" />
+    <script>
+      // 首屏先用系统偏好定主题，避免闪白；随后 app.js 以宿主的 app.getAppearance 校正
+      document.documentElement.dataset.theme = window.matchMedia("(prefers-color-scheme: light)").matches
+        ? "light"
+        : "dark";
+    </script>
+    <script defer src="./assets/app.js"></script>
+    <script defer src="./assets/games/snake.js"></script>
+    <script defer src="./assets/games/minesweeper.js"></script>
+    <script defer src="./assets/games/g2048.js"></script>
+    <script defer src="./assets/games/tetris.js"></script>
+    <script defer src="./assets/games/solitaire.js"></script>
+  </head>
+  <body>
+    <div id="root" class="mg-root"></div>
+  </body>
+</html>
