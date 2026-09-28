@@ -10,7 +10,7 @@ main.js                       插件主进程：只做偏好持久化（games.pr
 views/index.html              面板入口；<meta name="pi-plugin-chrome" content="v2" />
 views/assets/style.css        设计令牌（亮「考勤表」/ 暗「夜班」）+ 外壳骨架、打卡行、翻页时钟
 views/assets/app.js           外壳：游戏库、hash 路由、主题、持久化、游戏运行时 ctx
-views/assets/games/*.js       五个自包含游戏模块（经典脚本，无构建步骤）
+views/assets/games/*.js       八个自包含游戏模块（经典脚本，无构建步骤）
 ```
 
 ## 为什么这样组织
@@ -54,7 +54,10 @@ MOYU.games.<id> = {
 {
   "games": {
     "snake": { "plays": 3, "best": 120, "speed": "normal" },
-    "minesweeper": { "plays": 5, "wins": 2, "level": "beginner", "best.beginner": 32100 }
+    "minesweeper": { "plays": 5, "wins": 2, "level": "beginner", "best.beginner": 32100 },
+    "office": { "value": 11542, "earned": 11544, "bulk": 1, "lastSeen": 1758674400000, "lv0": 9, "lv3": 4 },
+    "sudoku": { "level": "medium", "wins": 3, "best.medium": 245000, "saved.given": "53…", "saved.cells": "53…", "saved.level": "medium" },
+    "twentyfour": { "mode": "easy", "wins": 4, "best.easy": 45000, "saved.mode": "easy", "saved.hand": "2 3 5 9", "saved.steps": "0,1,0,0,0" }
   },
   "days": { "2026-09-24": 1800000 },
   "totalMs": 1234567,
@@ -66,6 +69,14 @@ MOYU.games.<id> = {
 
 `days` 是「打卡机」用的按天累计毫秒，键为本地时区的 `YYYY-MM-DD`，只保留最近 31 天（`MAX_DAY_ENTRIES`），用于首页翻页时钟显示「今日已摸 N 分」。它和 `totalMs` 分开存：前者回答「今天摸了多久」，后者回答「一共摸了多久」。
 
+`office`（工位模拟器）一条只有 12 个键：`value` / `earned` / `bulk` / `lastSeen` 加 `lv0`…`lv7`，全部整数。条目上限 16 键（`MAX_ENTRY_KEYS`）决定了它没法按日期存历史，段位只能由 `earned` 反推；`lastSeen` 是离岗结算的唯一依据，所以每次落盘都必须刷新它，否则同一段离岗时间会被算两次。
+
+`office` 的数值曲线由互不重叠的三条决定：装备成本按 `growth`（1.22–1.24）逐级复利、产出按等级线性、段位倍率固定 ×1.2。**段位门槛不是拍出来的，而是按目标到达时间反推的**：起手 1 分钟、中段 40 分钟、最高段位约 8 小时面板在线时长，八件全部满级约 11 小时。改动 `FACILITIES`、`RANKS`、`MAX_LEVEL` 或倍率里的任何一项，都要重新反推门槛——只改一头会退化成「几分钟通关」。冒烟里的数值曲线闸门（顶档耗时、逐档递增、终局量级、满级在段位之后）就是防这个的。
+
+`sudoku` 一条 8 个键：`level` / `wins` / `best.easy` / `best.medium` / `best.hard` 加 `saved.given` / `saved.cells` / `saved.level`。两个 81 字符的牌面串分别存题面（同时当掩码，`0` 表示空格）和当前棋盘——这样「哪些格是题面给的」不用额外存一份布尔数组，省下的键位留给三档最快纪录。
+
+`twentyfour` 一条 7 个键：`mode` / `wins` / `best.easy` / `best.hard` 加 `saved.mode` / `saved.hand` / `saved.steps`。`saved.hand` 存**开局**的四张牌，`saved.steps` 存此后每一步（`i,j,op,swap,hint`），恢复时把步骤重放一遍就得到当前局面——存增量而不是存快照，算式小字才能原样还原。`hint` 记的是「这一手是提示替我走的」，于是提示次数不必单独计数：撤销一步就把对应的罚时一并退回。
+
 视图侧在插件桥不可用时（例如直接用浏览器打开 `views/index.html` 预览）自动回退到 `localStorage`（键 `moyu-games.prefs.v1`）。这条回退路径不过 `main.js`，所以天数上限与键名校验在 `app.js` 的 `normalizePrefs` 里另守一份。
 
 ## 验证
@@ -76,6 +87,6 @@ node --check views\assets\games\*.js     # PowerShell 下逐文件执行
 ```
 
 模块契约与生命周期用 Node + 最小 DOM 桩做冒烟（注册、挂载、定时器/键盘路径、卸载后无残留监听、重复进出、冷启动回填、天数上限）。
-各游戏的纯逻辑（合并、旋转踢墙、消行、接龙规则）在模块上挂 `_logic` 供单测脚本驱动。
+各游戏的纯逻辑（合并、旋转踢墙、消行、接龙规则、挂机的成本曲线与离岗结算、数独的生成与冲突判定、24 点的有理数与求解器）在模块上挂 `_logic` 供单测脚本驱动。
 
-发布前另外确认：窄面板（320 / 360 / 460px）下五个游戏都不产生横向溢出；亮暗两套主题的 `--mg-*` 全部有解析值；小字与底色的对比度过 AA。
+发布前另外确认：窄面板（320 / 360 / 460px）下八个游戏都不产生横向溢出；亮暗两套主题的 `--mg-*` 全部有解析值；小字与底色的对比度过 AA。
