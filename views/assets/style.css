@@ -35,6 +35,9 @@ html[data-theme="light"] {
   --mg-mark: rgba(240, 196, 69, 0.55);
   --mg-warn: #8f5d0e;
   --mg-bad: #b23a2c;
+  /* 数独：错格数字。--mg-bad 在暗色下压在 tint 底色上过不了 AA，单独给一个更亮的红 */
+  --mg-sd-clash: #b23a2c;
+  --mg-sd-ghost: #4a5560;
   --mg-shadow: 0 6px 18px rgba(27, 36, 48, 0.1);
   --mg-seam: rgba(27, 36, 48, 0.22);
   color-scheme: light;
@@ -55,6 +58,8 @@ html[data-theme="dark"] {
   --mg-mark: rgba(217, 168, 60, 0.38);
   --mg-warn: #d9a83c;
   --mg-bad: #d9584b;
+  --mg-sd-clash: #f08d80;
+  --mg-sd-ghost: #9fb0ad;
   --mg-shadow: 0 8px 22px rgba(0, 0, 0, 0.45);
   --mg-seam: rgba(0, 0, 0, 0.5);
   color-scheme: dark;
