@@ -651,19 +651,36 @@
 
   // ── 启动 ──────────────────────────────────────────────────────
 
+  /**
+   * 宿主把页面当「文档已完整」注入时，游戏脚本会晚于 app.js 到位（实测：模块 400ms
+   * 后才注册）。那一刻首屏已经按「0 款」渲染完，而且没有任何东西会再触发重绘——用户
+   * 只会看到一台空打卡机。这里有限次轮询：模块一到就补渲染一次；始终不到位（脚本真
+   * 加载失败）就停手，不空转。
+   */
+  const LATE_GAMES_POLL_MS = 100;
+  const LATE_GAMES_POLL_TRIES = 40; // 最多等 4 秒
+
+  function watchLateGames() {
+    let tries = 0;
+    const timer = window.setInterval(() => {
+      if (Object.keys(MOYU.games).length > 0) {
+        window.clearInterval(timer);
+        if (!active) render();
+        return;
+      }
+      tries += 1;
+      if (tries >= LATE_GAMES_POLL_TRIES) window.clearInterval(timer);
+    }, LATE_GAMES_POLL_MS);
+  }
+
   async function boot() {
     watchTheme();
     await loadPrefs();
     watchHostNavigation();
     render();
-    // defer 脚本按文档顺序在 DOMContentLoaded 前跑完，正常情况下这里已能看见全部
-    // 游戏。但宿主若以「文档已 complete」的方式注入页面（预览 / 热重载），app.js 会
-    // 早于游戏脚本执行，首屏就一个卡片都没有——那时再等一个宏任务补渲染一次。
-    if (Object.keys(MOYU.games).length === 0) {
-      window.setTimeout(() => {
-        if (!active) render();
-      }, 0);
-    }
+    // 正常情况下 defer 脚本已按文档顺序跑完，这里 MOYU.games 就是满的；
+    // 只有渲染成「0 款」时才需要等迟到的游戏模块。
+    if (Object.keys(MOYU.games).length === 0) watchLateGames();
   }
 
   if (document.readyState === "loading") {
