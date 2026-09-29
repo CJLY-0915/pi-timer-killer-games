@@ -5,17 +5,24 @@
  *
  * 视图: contributes.views[0] → views/index.html（右侧工作面板，宿主以 file:// 加载）
  *
- * 本插件不碰文件系统与网络，只做一件事：把每个游戏的最高分 / 设置 / 累计时长
- * 存进插件自己的 settings.json（pi.plugin.setSettings），让「摸鱼进度」跨会话保留。
+ * 不碰文件系统。唯一对外的东西是偏好持久化：把每个游戏的最高分 / 设置 / 累计时长存进插件
+ * 自己的 settings.json（pi.plugin.setSettings），让「摸鱼进度」跨会话保留。网络只出现在
+ * 局域网对局里，而且是用户主动开房 / 加入时才开端口（见 lan.js）。
  * 视图侧 window.pluginBridge.invoke(channel) → 这里 onPanelInvoke(channel, payload)。
  *
- * 通道（视图只能经这三个通道读写偏好，写操作必须过这里的清洗）：
+ * 通道（视图只能经这些通道读写偏好与对局状态，入参一律在这里清洗）：
  *   games.hello      → { ok, version, prefs, limits }
  *   games.prefs.get  → { ok, version, prefs, limits }
  *   games.prefs.set  → { partial } → { ok, prefs }
+ *   lan.status / lan.wait / lan.scan / lan.host / lan.join / lan.leave / lan.move /
+ *   lan.action / lan.rename / lan.close   → { ok, status }，出错时带 { code, message }
+ * 对局本身按游戏分模块：lan-gomoku.js / lan-zhajinhua.js 只讲规则，lan.js 只讲网络。
  *
- * 宿主对自定义通道的转发超时是 30s（plugin-runtime PLUGIN_PANEL_TIMEOUT_MS），
- * 这三个通道都是纯内存 + 一次同步落盘，远低于上限。
+ * 宿主对自定义通道的转发超时是 30s（plugin-runtime PLUGIN_PANEL_TIMEOUT_MS）。偏好读写是
+ * 纯内存 + 一次同步落盘，远低于上限；局域网长轮询（lan.wait）是唯一故意占掉大半预算的
+ * 通道，自己夹在 20s 以内。
+ *
+ * 局域网对局（lan.*）由 lan.js 承担：面板会话放不开局域网目标，网络只能留在这个进程里。
  */
 
 const SETTINGS_KEY = "moyuPrefs";
@@ -32,6 +39,27 @@ const DAY_KEY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 /** 按天累计只留最近这么多天，避免 settings.json 无限增长。 */
 const MAX_DAY_ENTRIES = 31;
 let prefs = createEmptyPrefs();
+
+/** 局域网会话（懒创建：没人开房就不占端口，也不建 socket）。 */
+let manager = null;
+
+/**
+ * 上一次热重载留下的实例会一直占着端口与定时器：宿主重载插件只重新 require 入口模块，
+ * 不会替我们调 onUnload，所以加载时就地把旧实例关掉。
+ */
+function adoptPreviousManager() {
+  const previous = globalThis.__moyuLan;
+  globalThis.__moyuLan = null;
+  if (previous && typeof previous.dispose === "function") {
+    try {
+      previous.dispose();
+    } catch {
+      /* 旧实例已经不可用，端口随进程回收 */
+    }
+  }
+}
+
+adoptPreviousManager();
 
 function createEmptyPrefs() {
   return { games: {}, days: {}, totalMs: 0, lastGame: "" };
@@ -117,10 +145,99 @@ function handlePrefsGet() {
   };
 }
 
+// ── 局域网对局（lan.*） ──────────────────────────────────────────────
+
+/** 局域网模块与它带的两个规则模块一起重读，改完存盘就能看到效果。 */
+const LAN_MODULES = ["./lan.js", "./lan-gomoku.js", "./lan-zhajinhua.js"];
+/** 昵称按游戏各存一份；开房前视图总会先 setName，这里只给个初值。 */
+const LAN_GAME_IDS = ["gomoku", "zhajinhua"];
+
+function loadLanModule() {
+  for (const name of LAN_MODULES) delete require.cache[require.resolve(name)];
+  return require("./lan.js");
+}
+
+function nicknameFromPrefs() {
+  for (const id of LAN_GAME_IDS) {
+    const entry = prefs.games && typeof prefs.games[id] === "object" ? prefs.games[id] : null;
+    const stored = entry && typeof entry.nickname === "string" ? entry.nickname : "";
+    if (stored) return stored;
+  }
+  return "摸鱼同事";
+}
+
+/** 开房参数只收已知字段，游戏 id 必须是字符串，数字必须是有限数。 */
+function hostOptions(payload) {
+  const options = {};
+  if (typeof payload?.game === "string" && payload.game.length <= 32) options.game = payload.game;
+  for (const field of ["ante", "cap", "stack"]) {
+    if (typeof payload?.[field] === "number" && Number.isFinite(payload[field])) options[field] = payload[field];
+  }
+  return options;
+}
+
+function lanManager() {
+  if (!manager) {
+    const mod = loadLanModule();
+    manager = mod.createLanManager({
+      nickname: nicknameFromPrefs(),
+      discoveryPort: mod.DISCOVERY_PORT,
+      preferredPort: mod.PREFERRED_TCP_PORT,
+    });
+    globalThis.__moyuLan = manager;
+  }
+  return manager;
+}
+
+/** 视图把昵称和动作放在同一条通道里，省一次往返。 */
+function lanWithName(payload) {
+  const active = lanManager();
+  if (payload && typeof payload.name === "string") active.setName(payload.name);
+  return active;
+}
+
+/** 每个动作都回带一份最新状态：界面只认 status，不必自己拼中间态。 */
+function withStatus(result) {
+  return { ...(result && typeof result === "object" ? result : {}), status: lanManager().status() };
+}
+
+const LAN_CHANNELS = {
+  "lan.status": () => withStatus({ ok: true }),
+  "lan.wait": (payload) =>
+    lanManager()
+      .wait(payload?.since, payload?.timeoutMs)
+      .then((status) => ({ ok: true, status })),
+  "lan.scan": async (payload) => withStatus(await lanWithName(payload).scan()),
+  "lan.host": async (payload) => withStatus(await lanWithName(payload).host(hostOptions(payload))),
+  "lan.join": async (payload) =>
+    withStatus(await lanWithName(payload).join(payload?.host, payload?.port, payload?.game)),
+  "lan.leave": () => withStatus(lanManager().leave()),
+  // 离开游戏界面就彻底收摊：发现端口与定时器一并放掉，不留在后台占端口
+  "lan.close": () => {
+    if (manager) {
+      try {
+        manager.dispose();
+      } catch {
+        /* 已经释放过 */
+      }
+      manager = null;
+      globalThis.__moyuLan = null;
+    }
+    return { ok: true };
+  },
+  "lan.move": (payload) => withStatus(lanManager().move(payload?.x, payload?.y)),
+  "lan.action": (payload) => withStatus(lanManager().intent(payload?.kind, payload)),
+  "lan.rename": (payload) => {
+    lanManager().setName(payload?.name);
+    return withStatus({ ok: true });
+  },
+};
+
 const CHANNELS = {
   "games.hello": handlePrefsGet,
   "games.prefs.get": handlePrefsGet,
   "games.prefs.set": handlePrefsSet,
+  ...LAN_CHANNELS,
 };
 
 async function onPanelInvoke(channel, payload) {
@@ -145,6 +262,15 @@ async function onLoad() {
 }
 
 function onUnload() {
+  if (manager) {
+    try {
+      manager.dispose();
+    } catch {
+      /* 进程正在退出，端口和定时器随进程回收 */
+    }
+    manager = null;
+  }
+  globalThis.__moyuLan = null;
   prefs = createEmptyPrefs();
 }
 

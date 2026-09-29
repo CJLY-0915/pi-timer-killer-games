@@ -426,7 +426,7 @@
     hub.append(
       el("div", {
         class: "mg-foot",
-        text: "全部本地运行，不联网、不读文件；战绩存在本机。",
+        text: "单机玩法全部本地运行；联机玩法只在你创建或加入房间时走局域网直连，不访问互联网。战绩存在本机。",
       }),
     );
 
@@ -652,23 +652,26 @@
   // ── 启动 ──────────────────────────────────────────────────────
 
   /**
-   * 宿主把页面当「文档已完整」注入时，游戏脚本会晚于 app.js 到位（实测：模块 400ms
-   * 后才注册）。那一刻首屏已经按「0 款」渲染完，而且没有任何东西会再触发重绘——用户
-   * 只会看到一台空打卡机。这里有限次轮询：模块一到就补渲染一次；始终不到位（脚本真
-   * 加载失败）就停手，不空转。
+   * 宿主把页面当「文档已完整」注入时，游戏脚本会晚于 app.js 分批到位（实测：模块 400ms
+   * 后才注册）。首屏那一刻列表还是空的，或只有最先到的那几个，而且没有任何东西会再触发
+   * 重绘。这里做有限次轮询：**每发现数量变化就补渲染一次**，盯满 4 秒为止。
+   *
+   * 不能「一看到有游戏就收手」：脚本是分批注册的，第一个非空快照往往只含前两三个，一收手
+   * 游戏库就永远少几行（游戏其实都在，只是没人重绘列表）。
    */
   const LATE_GAMES_POLL_MS = 100;
   const LATE_GAMES_POLL_TRIES = 40; // 最多等 4 秒
 
   function watchLateGames() {
+    let lastCount = Object.keys(MOYU.games).length;
     let tries = 0;
     const timer = window.setInterval(() => {
-      if (Object.keys(MOYU.games).length > 0) {
-        window.clearInterval(timer);
-        if (!active) render();
-        return;
-      }
       tries += 1;
+      const count = Object.keys(MOYU.games).length;
+      if (count !== lastCount) {
+        lastCount = count;
+        if (!active) render();
+      }
       if (tries >= LATE_GAMES_POLL_TRIES) window.clearInterval(timer);
     }, LATE_GAMES_POLL_MS);
   }
@@ -678,9 +681,8 @@
     await loadPrefs();
     watchHostNavigation();
     render();
-    // 正常情况下 defer 脚本已按文档顺序跑完，这里 MOYU.games 就是满的；
-    // 只有渲染成「0 款」时才需要等迟到的游戏模块。
-    if (Object.keys(MOYU.games).length === 0) watchLateGames();
+    // 脚本可能还在陆续注册（宿主注入时机不定），数量一变就补渲染一次。
+    watchLateGames();
   }
 
   if (document.readyState === "loading") {

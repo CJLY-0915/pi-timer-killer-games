@@ -2,18 +2,18 @@
   "schemaVersion": 1,
   "id": "icedly.moyu-games",
   "name": "摸鱼小游戏",
-  "version": "0.3.0",
-  "description": "右侧工作面板里的休闲小游戏合集：扫雷、2048、纸牌接龙、俄罗斯方块、贪吃蛇、数独、24 点，外加一款关掉面板也自己在转的工位模拟器。纯本地运行，不访问网络与文件系统；每个游戏各自记住最高分、设置与累计时长，跨会话保留。",
+  "version": "0.5.0",
+  "description": "右侧工作面板里的休闲小游戏合集：扫雷、2048、纸牌接龙、俄罗斯方块、贪吃蛇、数独、24 点，一款关掉面板也自己在转的工位模拟器，外加局域网五子棋与局域网炸金花（2-5 人一张牌桌）。单机玩法纯本地运行，不读自己数据目录以外的文件；两款联机玩法只在你创建或加入房间时才在局域网内直连，不访问互联网。每个游戏各自记住最高分、设置与累计时长，跨会话保留。",
   "i18n": {
     "en": {
       "name": "Time-Killer Games",
-      "description": "A local mini-game collection for the right work panel: Minesweeper, 2048, Klondike Solitaire, Tetris, Snake, Sudoku and 24, plus a Desk Simulator idle game that keeps producing while the panel is closed. Runs fully offline with no file or network access; each game keeps its own best score, settings and total play time across sessions.",
-      "safetyNotes": "Everything runs on your own machine. The plugin makes no network requests and reads no files outside its own data directory, and it asks for a single permission: a view in the right panel. Best scores and play time are stored locally in the plugin data directory and never leave the machine."
+      "description": "A local mini-game collection for the right work panel: Minesweeper, 2048, Klondike Solitaire, Tetris, Snake, Sudoku and 24, a Desk Simulator idle game that keeps producing while the panel is closed, plus LAN Gomoku and LAN Zha Jin Hua (a 2-5 player card table). Solo games run fully on your machine and read no files outside the plugin data directory; the two LAN games talk only to your own local network, and only while you host or join a room. Every game keeps its own best score, settings and total play time across sessions.",
+      "safetyNotes": "Every solo game runs on your own machine, makes no network request and reads no files outside the plugin data directory. The two LAN games (Gomoku and Zha Jin Hua) are the only exceptions, and they touch the network only after you click \"Create room\" or \"Join room\" in the panel: the plugin then opens one UDP discovery port and one TCP match port on your local network, and releases both as soon as you leave the room or close the panel. They never reach the internet and have no server — traffic goes directly between machines on the same subnet. Windows may ask for a firewall exception the first time you host; it must be allowed, otherwise the other players cannot connect. Best scores, match records and play time stay in the plugin data directory on this machine."
     },
     "zh-CN": {
       "name": "摸鱼小游戏",
-      "description": "右侧工作面板里的休闲小游戏合集：扫雷、2048、纸牌接龙、俄罗斯方块、贪吃蛇、数独、24 点，外加一款关掉面板也自己在转的工位模拟器。纯本地运行，不访问网络与文件系统；每个游戏各自记住最高分、设置与累计时长，跨会话保留。",
-      "safetyNotes": "全部在本机运行：不发任何网络请求，也不读取自己数据目录以外的文件；只申请一个权限，即右侧工作面板里的一个视图。最高分与累计时长存在插件自己的数据目录里，不会离开本机。"
+      "description": "右侧工作面板里的休闲小游戏合集：扫雷、2048、纸牌接龙、俄罗斯方块、贪吃蛇、数独、24 点，一款关掉面板也自己在转的工位模拟器，外加局域网五子棋与局域网炸金花（2-5 人一张牌桌）。单机玩法纯本地运行，不读自己数据目录以外的文件；两款联机玩法只在你创建或加入房间时才在局域网内直连，不访问互联网。每个游戏各自记住最高分、设置与累计时长，跨会话保留。",
+      "safetyNotes": "单机玩法全部在本机运行，不发任何网络请求，也不读取自己数据目录以外的文件。局域网五子棋与局域网炸金花是唯一的例外，而且只在你于面板里点「创建房间」或「加入房间」时才动网：此时插件在局域网内开一个 UDP 发现端口与一个 TCP 对局端口，离开房间或关闭面板即收回。它们不访问互联网，也没有服务器，数据只在同网段的机器之间直连。首次开房 Windows 可能弹出防火墙询问，必须允许，否则对方连不进来。最高分、战绩与累计时长存在插件自己的数据目录里，不会离开本机。"
     }
   },
   "author": "cjly90",
